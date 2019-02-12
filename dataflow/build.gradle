@@ -1,0 +1,63 @@
+plugins {
+    id 'java'
+    id 'maven'
+}
+
+version = '0.1'
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+def beamVersion = '2.9.0'
+
+def gcpProject = "${System.env.GOOGLE_PROJECT}"
+def bucket = "${System.env.TF_VAR_resource_bucket}"
+def relpath = project.name
+def pipeclass = 'com.muvaki.beam.Pipe'
+
+task runLocal(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    main = pipeclass
+    args "--tempLocation=gs://${bucket}/${relpath}/tmp"
+    args "--project=${gcpProject}"
+    args "--inputQuery=select * from [bigquery-public-data.austin_311.311_service_requests] limit 10"
+    args "--outputPattern=gs://${bucket}/data/311/csv/export"
+}
+
+task runFlow(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    main = pipeclass
+    args '--runner=DataflowRunner'
+    args "--tempLocation=gs://${bucket}/${relpath}/tmp"
+    args "--project=${gcpProject}"
+    args "--gcpTempLocation=gs://${bucket}/${relpath}/tmp"
+    args "--inputQuery=select * from [bigquery-public-data.austin_311.311_service_requests]"
+    args "--outputPattern=gs://${bucket}/data/311/csv/export"
+}
+
+task templateFlow(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    main = pipeclass
+    args '--runner=DataflowRunner'
+    args "--project=${gcpProject}"
+    args "--templateLocation=gs://${bucket}/${relpath}/templates/template"
+    args "--stagingLocation=gs://${bucket}/${relpath}/staging"
+}
+
+repositories {
+    maven { url "https://repository.apache.org/content/repositories/snapshots/" }
+    maven { url "http://repo.maven.apache.org/maven2" }
+}
+
+dependencies {
+    compile group: 'com.google.cloud', name: 'google-cloud-bigquery', version: '1.40.0'
+    compile group: 'org.apache.beam', name: 'beam-sdks-java-core', version: "${beamVersion}"
+    compile group: 'org.apache.beam', name: 'beam-sdks-java-io-google-cloud-platform', version: "${beamVersion}"
+    compile group: 'org.apache.beam', name: 'beam-runners-google-cloud-dataflow-java', version: "${beamVersion}"
+    runtime group: 'org.apache.beam', name: 'beam-runners-direct-java', version: "${beamVersion}"
+    compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.25'
+    compile group: 'org.hamcrest', name: 'hamcrest-core', version: '1.3'
+    compile group: 'org.hamcrest', name: 'hamcrest-library', version: '1.3'
+    compile group: 'junit', name: 'junit', version: '4.12'
+    runtime group: 'org.slf4j', name: 'slf4j-jdk14', version: '1.7.25'
+    testCompile group: 'org.mockito', name: 'mockito-core', version: '1.9.5'
+}
